@@ -199,7 +199,7 @@ function App() {
 
   return (
     <div className="app-container">
-      <h1>Configurateur AVG Clan</h1>
+      <h1>Configurateur RO Clan</h1>
 
       {/* 1. Player Stats */}
       <section>
