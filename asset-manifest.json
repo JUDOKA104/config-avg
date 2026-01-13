@@ -1,7 +1,7 @@
 {
   "files": {
     "main.css": "/config-avg/static/css/main.ad396f57.css",
-    "main.js": "/config-avg/static/js/main.523de87e.js",
+    "main.js": "/config-avg/static/js/main.812fede1.js",
     "static/js/453.d7089baf.chunk.js": "/config-avg/static/js/453.d7089baf.chunk.js",
     "static/media/Weaken.png": "/config-avg/static/media/Weaken.c1033f4d1e6d69dcbd27.png",
     "static/media/PowerBubble.png": "/config-avg/static/media/PowerBubble.cc2bab3f868a7dcaa9b1.png",
@@ -47,11 +47,11 @@
     "static/media/TeamTactics.png": "/config-avg/static/media/TeamTactics.3a4909cf58909cd14aac.png",
     "index.html": "/config-avg/index.html",
     "main.ad396f57.css.map": "/config-avg/static/css/main.ad396f57.css.map",
-    "main.523de87e.js.map": "/config-avg/static/js/main.523de87e.js.map",
+    "main.812fede1.js.map": "/config-avg/static/js/main.812fede1.js.map",
     "453.d7089baf.chunk.js.map": "/config-avg/static/js/453.d7089baf.chunk.js.map"
   },
   "entrypoints": [
     "static/css/main.ad396f57.css",
-    "static/js/main.523de87e.js"
+    "static/js/main.812fede1.js"
   ]
 }
