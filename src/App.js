@@ -6,33 +6,33 @@ function App() {
   const [data, setData] = useState(initialData);
   const [isLoading, setIsLoading] = useState(false);
 
-  // API Configuration
-  // Note: Pour une clé API standard (Access Key), on utilise le header X-Access-Key
-  const BIN_API_KEY = "$2a$10$2DgSduFC2.1CMaoFnzYX.u7rfYNtvfx9Aah2TcrfvOtXg7oJoDD3G";
-  const BIN_URL = "https://api.jsonbin.io/v3/b";
+  // --- FIREBASE CONFIGURATION ---
+  // J'ai ajouté "/configs" à la fin pour organiser les données dans un sous-dossier
+  const FIREBASE_DB_URL = "https://ro-clan-config-default-rtdb.europe-west1.firebasedatabase.app/configs";
 
   // --- CHARGEMENT VIA URL (Au démarrage) ---
   useEffect(() => {
-    const loadFromBin = async () => {
+    const loadFromFirebase = async () => {
       const params = new URLSearchParams(window.location.search);
       const binId = params.get('id');
 
       if (binId) {
         setIsLoading(true);
         try {
-          const response = await fetch(`${BIN_URL}/${binId}`, {
-            headers: {
-              'X-Access-Key': BIN_API_KEY // CORRECTION ICI
-            }
-          });
+          // Firebase REST API nécessite ".json" à la fin de l'URL pour lire
+          const response = await fetch(`${FIREBASE_DB_URL}/${binId}.json`);
 
           if (!response.ok) throw new Error("Erreur lors du chargement de la config");
 
           const result = await response.json();
-          if (result.record) {
-            setData(result.record);
+
+          // Firebase renvoie null si l'ID n'existe pas, sinon il renvoie directement l'objet
+          if (result) {
+            setData(result);
             window.history.replaceState({}, document.title, window.location.pathname);
             alert("Configuration chargée avec succès !");
+          } else {
+            alert("Configuration introuvable ou lien expiré.");
           }
         } catch (error) {
           console.error(error);
@@ -43,7 +43,7 @@ function App() {
       }
     };
 
-    loadFromBin();
+    loadFromFirebase();
   }, []);
 
   // --- CONFIGURATION CARTES (Identique) ---
@@ -193,31 +193,32 @@ function App() {
     navigator.clipboard.writeText(jsonString).then(() => alert("Configuration copiée !")).catch(console.error);
   };
 
-  // 3. PARTAGE API (SHARE)
+  // 3. PARTAGE API (FIREBASE)
   const handleShare = async () => {
     setIsLoading(true);
     try {
       const exportData = prepareExportData();
 
-      const response = await fetch(BIN_URL, {
+      // POST vers Firebase. On ajoute ".json" à la fin de l'URL.
+      // Firebase génère automatiquement une clé unique.
+      const response = await fetch(`${FIREBASE_DB_URL}.json`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'X-Access-Key': BIN_API_KEY, // CORRECTION ICI AUSSI
-          'X-Bin-Private': 'false',
-          'X-Bin-Name': 'RO_Config_' + Date.now()
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify(exportData)
       });
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error("Détails erreur JSONBin:", errorText);
-        throw new Error(`Erreur API (${response.status}) : Vérifie la console (F12)`);
+        console.error("Détails erreur Firebase:", errorText);
+        throw new Error(`Erreur API (${response.status})`);
       }
 
       const result = await response.json();
-      const binId = result.metadata.id;
+
+      // Chez Firebase, l'ID généré est stocké dans la propriété "name"
+      const binId = result.name;
 
       const shareUrl = `${window.location.origin}${window.location.pathname}?id=${binId}`;
 
