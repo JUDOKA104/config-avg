@@ -1,11 +1,52 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import './App.css';
 import { initialData } from './initialData';
 
 function App() {
   const [data, setData] = useState(initialData);
+  const [isLoading, setIsLoading] = useState(false);
 
-  // --- CONFIGURATION CARTES ---
+  // API Configuration
+  // Note: Pour une clé API standard (Access Key), on utilise le header X-Access-Key
+  const BIN_API_KEY = "$2a$10$2DgSduFC2.1CMaoFnzYX.u7rfYNtvfx9Aah2TcrfvOtXg7oJoDD3G";
+  const BIN_URL = "https://api.jsonbin.io/v3/b";
+
+  // --- CHARGEMENT VIA URL (Au démarrage) ---
+  useEffect(() => {
+    const loadFromBin = async () => {
+      const params = new URLSearchParams(window.location.search);
+      const binId = params.get('id');
+
+      if (binId) {
+        setIsLoading(true);
+        try {
+          const response = await fetch(`${BIN_URL}/${binId}`, {
+            headers: {
+              'X-Access-Key': BIN_API_KEY // CORRECTION ICI
+            }
+          });
+
+          if (!response.ok) throw new Error("Erreur lors du chargement de la config");
+
+          const result = await response.json();
+          if (result.record) {
+            setData(result.record);
+            window.history.replaceState({}, document.title, window.location.pathname);
+            alert("Configuration chargée avec succès !");
+          }
+        } catch (error) {
+          console.error(error);
+          alert("Impossible de charger la configuration partagée.");
+        } finally {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    loadFromBin();
+  }, []);
+
+  // --- CONFIGURATION CARTES (Identique) ---
   const cardCategories = {
     "Support": [
       "ExecutionersAxe", "CrushingVoid", "MentalFocus", "ImpactAttack",
@@ -65,16 +106,6 @@ function App() {
     return label.replace(/\s+/g, ' ').trim();
   };
 
-  // LISTE D'EXCLUSION
-  const excludedRaidStats = [
-    "Raid Cards Owned", "Wildcards", "Lifetime Clan Morale",
-    "Solo Raid World Reached", "Total Raid Experience", "Total Raid Attacks",
-    "Raid Level",
-    "Raid Level Base Dmg",
-    "Raid Level Base Damage",
-    "Total Raid Card Levels"
-  ];
-
   // --- HANDLERS ---
   const handleStatChange = (category, key, value) => {
     setData(prev => ({ ...prev, [category]: { ...prev[category], [key]: value } }));
@@ -91,32 +122,31 @@ function App() {
     setData(prev => ({ ...prev, [category]: { ...prev[category], [key]: isNaN(decimalValue) ? 0 : decimalValue } }));
   };
 
-  // --- EXPORT & CALCULS ---
-  const copyToClipboard = () => {
+  // --- PREPARATION DATA ---
+  const prepareExportData = () => {
     const exportData = JSON.parse(JSON.stringify(data));
 
-    // 1. CALCUL : TOTAL RAID CARD LEVELS
+    // 1. CALCULS
     let totalCardLevels = 0;
-    Object.values(exportData.raidCards).forEach(card => {
-      totalCardLevels += (parseInt(card.lv) || 0);
-    });
+    if (exportData.raidCards) {
+      Object.values(exportData.raidCards).forEach(card => {
+        totalCardLevels += (parseInt(card.lv) || 0);
+      });
+    }
+    if (!exportData.raidStats) exportData.raidStats = {};
     exportData.raidStats["Total Raid Card Levels"] = totalCardLevels;
 
-    // 2. CALCUL : RAID LEVEL BASE DAMAGE (Sans doublon)
     const currentRaidLevel = parseFloat(exportData.raidStats["Raid Level"]) || 0;
     const calculatedBaseDmg = currentRaidLevel + 100;
 
     let targetKey = "Raid Level Base Damage";
     const existingKeys = Object.keys(exportData.raidStats);
     const foundKey = existingKeys.find(k => k.trim() === "Raid Level Base Damage" || k === "Raid Level Base Dmg");
-
-    if (foundKey) {
-      targetKey = foundKey;
-    }
+    if (foundKey) targetKey = foundKey;
 
     exportData.raidStats[targetKey] = calculatedBaseDmg;
 
-    // 3. Conversion Scientifique
+    // 2. Scientifique
     const scientificCategories = ['raid_card_research', 'gemstonesResearch', 'titanResearch'];
     const toScientific = (val) => {
       const num = Number(val);
@@ -124,16 +154,89 @@ function App() {
       return num.toExponential(3).toUpperCase();
     };
     scientificCategories.forEach(cat => {
-      Object.keys(exportData[cat]).forEach(key => { exportData[cat][key] = toScientific(exportData[cat][key]); });
+      if (exportData[cat]) {
+        Object.keys(exportData[cat]).forEach(key => { exportData[cat][key] = toScientific(exportData[cat][key]); });
+      }
     });
 
-    const jsonString = JSON.stringify(exportData, null, 2);
-    navigator.clipboard.writeText(jsonString).then(() => alert("Copié !")).catch(console.error);
+    return exportData;
   };
 
-  // --- RENDU SECTIONS ---
+  // --- FONCTIONNALITES BOUTONS ---
+
+  // 1. IMPORT DU PRESSE-PAPIER
+  const handleImportFromClipboard = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (!text) {
+        alert("Le presse-papier est vide !");
+        return;
+      }
+
+      const json = JSON.parse(text);
+      if (!json.raidCards && !json.playerStats) {
+        throw new Error("Format JSON non reconnu");
+      }
+
+      setData(json);
+      alert("Configuration chargée depuis le presse-papier !");
+    } catch (error) {
+      console.error("Import Error:", error);
+      alert("Erreur : Le contenu du presse-papier n'est pas un JSON valide ou le format est incorrect.");
+    }
+  };
+
+  // 2. EXPORT VERS PRESSE-PAPIER
+  const copyToClipboard = () => {
+    const exportData = prepareExportData();
+    const jsonString = JSON.stringify(exportData, null, 2);
+    navigator.clipboard.writeText(jsonString).then(() => alert("Configuration copiée !")).catch(console.error);
+  };
+
+  // 3. PARTAGE API (SHARE)
+  const handleShare = async () => {
+    setIsLoading(true);
+    try {
+      const exportData = prepareExportData();
+
+      const response = await fetch(BIN_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Access-Key': BIN_API_KEY, // CORRECTION ICI AUSSI
+          'X-Bin-Private': 'false',
+          'X-Bin-Name': 'RO_Config_' + Date.now()
+        },
+        body: JSON.stringify(exportData)
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Détails erreur JSONBin:", errorText);
+        throw new Error(`Erreur API (${response.status}) : Vérifie la console (F12)`);
+      }
+
+      const result = await response.json();
+      const binId = result.metadata.id;
+
+      const shareUrl = `${window.location.origin}${window.location.pathname}?id=${binId}`;
+
+      await navigator.clipboard.writeText(shareUrl);
+      alert(`Lien généré et copié !\n${shareUrl}`);
+
+    } catch (error) {
+      console.error(error);
+      alert("Erreur lors de la génération du lien. (Ouvre la console F12 pour voir les détails)");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // --- RENDU UI ---
   const renderDetailedSection = (categoryKey) => {
     const statsData = data[categoryKey];
+    if (!statsData) return null;
+
     const keys = Object.keys(statsData);
     const buckets = { "Base": [], "Armor": [], "Body": [], "Titans": [], "Burst": [], "Affliction": [] };
 
@@ -167,9 +270,9 @@ function App() {
 
   const renderTitanSection = (categoryKey) => {
     const statsData = data[categoryKey];
+    if (!statsData) return null;
     const keys = Object.keys(statsData);
     const buckets = { "Base": [], "Titans": [] };
-
     keys.forEach(key => {
       if (key.toLowerCase().includes('enemy')) buckets["Titans"].push(key);
       else buckets["Base"].push(key);
@@ -199,33 +302,30 @@ function App() {
 
   return (
     <div className="app-container">
+      {isLoading && <div className="loading-overlay">Chargement...</div>}
+
       <h1>Configurateur RO Clan</h1>
 
       {/* 1. Player Stats */}
       <section>
         <h2>Player Stats</h2>
         <div className="stats-grid" style={{ justifyContent: 'center' }}>
-
-          {/* RAID LEVEL */}
           <div className="input-group">
             <label>Raid Level</label>
             <input
               type="number"
-              value={toNormalNumber(data.raidStats["Raid Level"])}
+              value={toNormalNumber(data.raidStats?.["Raid Level"])}
               onChange={(e) => handleStatChange("raidStats", "Raid Level", e.target.value)}
             />
           </div>
-
-          {/* NECROBEAR */}
           <div className="input-group">
             <label>Necrobear Level</label>
             <input
               type="number"
-              value={toNormalNumber(data.playerStats["Necrobear Level"])}
+              value={toNormalNumber(data.playerStats?.["Necrobear Level"])}
               onChange={(e) => handleStatChange("playerStats", "Necrobear Level", e.target.value)}
             />
           </div>
-
         </div>
       </section>
 
@@ -237,7 +337,7 @@ function App() {
             <h3 className="category-title">{categoryName}</h3>
             <div className="cards-grid">
               {cardsList.map(cardName => {
-                if (!data.raidCards[cardName]) return null;
+                if (!data.raidCards || !data.raidCards[cardName]) return null;
                 const imageSrc = getCardImage(cardName);
                 return (
                   <div key={cardName} className="card-item">
@@ -260,28 +360,29 @@ function App() {
         ))}
       </section>
 
-      {/* 3. Raid Card Research */}
-      <section>
-        <h2>Raid Card Research</h2>
-        {renderDetailedSection("raid_card_research")}
-      </section>
-
-      {/* 4. Gemstones Research */}
-      <section>
-        <h2>Gemstones Research</h2>
-        {renderDetailedSection("gemstonesResearch")}
-      </section>
-
-      {/* 5. Titan Research */}
-      <section>
-        <h2>Titan Research (%)</h2>
-        {renderTitanSection("titanResearch")}
-      </section>
+      {/* 3. Research Sections */}
+      <section><h2>Raid Card Research</h2>{renderDetailedSection("raid_card_research")}</section>
+      <section><h2>Gemstones Research</h2>{renderDetailedSection("gemstonesResearch")}</section>
+      <section><h2>Titan Research (%)</h2>{renderTitanSection("titanResearch")}</section>
 
       <div className="sticky-footer">
-        <button className="copy-btn" onClick={copyToClipboard}>
-          Copier la config
-        </button>
+        <div className="footer-buttons">
+
+          {/* BOUTON IMPORT (Presse-Papier) */}
+          <button className="action-btn import-btn" onClick={handleImportFromClipboard}>
+            📋 Paste Config
+          </button>
+
+          {/* BOUTON COPIER */}
+          <button className="action-btn copy-btn" onClick={copyToClipboard}>
+            💾 Copier Config
+          </button>
+
+          {/* BOUTON SHARE */}
+          <button className="action-btn share-btn" onClick={handleShare}>
+            🔗 Partager Lien
+          </button>
+        </div>
       </div>
     </div>
   );
